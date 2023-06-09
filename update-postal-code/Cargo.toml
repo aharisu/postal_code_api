@@ -1,0 +1,24 @@
+[package]
+name = "update-postal-code"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+base64 = "0.21.2"
+csv = "1.2.2"
+digest = "0.10.7"
+encoding_rs = "0.8.32"
+regex = "1.8.4"
+reqwest = { version = "0.11.18",  default-features = false, features = ["blocking", "rustls-tls"] }
+sha2 = "0.10.6"
+zip = "0.6.6"
+aws-config = "0.55.1"
+aws-sdk-dynamodb = "0.28.0"
+lambda_http = { version = "0.8.0", default-features = false, features = ["apigw_rest"] }
+lambda_runtime = "0.8.0"
+serde = "1.0.160"
+tokio = { version = "1", features = ["macros"] }
+tracing = { version = "0.1", features = ["log"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt"] }
