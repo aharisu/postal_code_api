@@ -10,11 +10,13 @@ use lambda_http::{run, service_fn, Body, Error, Request, Response};
 
 use crate::postal_code_record::PostalCodeRecord;
 
+// コンテンツ全体に対するハッシュ値を保存するキー (national_local_government_codeと絶対に被らない適当な文字列であればよい)
 const HASH_ITEM_KEY: &str = "#hash#";
 
-async fn function_handler(client: &Client, event: Request) -> Result<Response<Body>, Error> {
+async fn function_handler(client: &Client, _event: Request) -> Result<Response<Body>, Error> {
     tracing::info!("Start handler");
 
+    // 環境変数から必要なDynamoDBのテーブル名を取得
     let table_name = env::var("POSTAL_CODE_TABLE").expect("POSTAL_CODE_TABLE not set");
     let hash_table_name = env::var("HASH_TABLE").expect("POSTAL_CODE_TABLE not set");
 
@@ -101,7 +103,9 @@ async fn function_handler(client: &Client, event: Request) -> Result<Response<Bo
             )
             .await?;
 
+            // 変更のあったレコードなら
             if changed {
+                // DynamoDBに住所情報を書き込む
                 let put_request = PutRequest::builder()
                     .item("postal_code", AttributeValue::S(record.postal_code))
                     .item("prefecture", AttributeValue::S(record.prefecture))
@@ -116,15 +120,11 @@ async fn function_handler(client: &Client, event: Request) -> Result<Response<Bo
 
                 requests.push(req);
 
-                // 大きなデータを送信するとエラーになるため定期等な数毎にバッチリクエストを実行する
+                // 大きなデータを送信するとエラーになるため適当な数ごとにバッチリクエストを実行する
                 if requests.len() == 25 {
                     count += requests.len();
 
-                    client
-                        .batch_write_item()
-                        .request_items(table_name.to_owned(), requests.clone())
-                        .send()
-                        .await?;
+                    send_batch_write_item(client, table_name.to_owned(), requests.clone()).await?;
 
                     requests.clear();
                 }
@@ -134,11 +134,7 @@ async fn function_handler(client: &Client, event: Request) -> Result<Response<Bo
         if requests.len() > 0 {
             count += requests.len();
 
-            client
-                .batch_write_item()
-                .request_items(table_name.to_owned(), requests.clone())
-                .send()
-                .await?;
+            send_batch_write_item(client, table_name.to_owned(), requests.clone()).await?;
 
             requests.clear();
         }
@@ -159,24 +155,16 @@ async fn function_handler(client: &Client, event: Request) -> Result<Response<Bo
             let req = WriteRequest::builder().put_request(put_request).build();
             requests.push(req);
 
-            // 大きなデータを送信するとエラーになるため定期等な数毎にバッチリクエストを実行する
+            // 大きなデータを送信するとエラーになるため適当な数ごとにバッチリクエストを実行する
             if requests.len() == 25 {
-                client
-                    .batch_write_item()
-                    .request_items(hash_table_name.to_owned(), requests.clone())
-                    .send()
-                    .await?;
+                send_batch_write_item(client, hash_table_name.to_owned(), requests.clone()).await?;
 
                 requests.clear();
             }
         }
 
         if requests.len() > 0 {
-            client
-                .batch_write_item()
-                .request_items(hash_table_name.to_owned(), requests)
-                .send()
-                .await?;
+            send_batch_write_item(client, hash_table_name.to_owned(), requests).await?;
         }
     }
 
@@ -187,6 +175,21 @@ async fn function_handler(client: &Client, event: Request) -> Result<Response<Bo
         .map_err(Box::new)?;
 
     Ok(res)
+}
+
+// batch_write_itemのリクエストを送信する
+async fn send_batch_write_item(
+    client: &Client,
+    table_name: String,
+    requests: Vec<WriteRequest>,
+) -> Result<(), Error> {
+    client
+        .batch_write_item()
+        .request_items(table_name, requests)
+        .send()
+        .await?;
+
+    Ok(())
 }
 
 async fn is_hash_change(
@@ -238,7 +241,7 @@ async fn main() -> Result<(), Error> {
     tracing::info!("Initializing lambda function");
 
     let client = Client::new(&aws_config::load_from_env().await);
-    tracing::info!(client = ?client, "Created DynaoDB");
+    tracing::info!(client = ?client, "Created DynamoDB");
 
     run(service_fn(|event| async {
         function_handler(&client, event).await

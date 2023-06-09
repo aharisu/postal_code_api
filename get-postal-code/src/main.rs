@@ -21,17 +21,22 @@ struct ResponseData {
 }
 
 async fn function_handler(client: &Client, event: Request) -> Result<Response<Body>, Error> {
+    // 環境変数から郵便番号が保存されたDynamoDBのテーブル名を取得
     let table_name = env::var("POSTAL_CODE_TABLE").expect("POSTAL_CODE_TABLE not set");
 
+    // API Gatewayから渡されたパスパラメータを取得
     let path_parameters = event.path_parameters();
     tracing::info!(path_parameters = ?path_parameters, "query");
 
     let mut code: Option<String> = None;
     let mut address: Option<Address> = None;
+    //パスパラメータから検索する郵便番号を取得
     if let Some(postal_code) = path_parameters.first("postalCode") {
+        //郵便番号入力値を正規化
         let postal_code = postal_code_normalize(postal_code);
         tracing::info!(postal_code = ?postal_code, "Postal code");
 
+        //郵便番号をキーにしてDynamoDBから住所情報を取得
         let item = client
             .get_item()
             .table_name(table_name)
@@ -39,6 +44,7 @@ async fn function_handler(client: &Client, event: Request) -> Result<Response<Bo
             .send()
             .await?;
 
+        //DynamoDBから住所情報を取得出来たら、レスポンスに住所情報をセット
         if let Some(record) = item.item() {
             let prefecture = record.get("prefecture").unwrap().as_s().unwrap();
             let city = record.get("city").unwrap().as_s().unwrap();
@@ -57,9 +63,11 @@ async fn function_handler(client: &Client, event: Request) -> Result<Response<Bo
             });
         }
 
+        //検索に使用した入力値をレスポンスにセット
         code = Some(postal_code);
     }
 
+    // 返却用のデータを作成
     let data = ResponseData {
         code: code.unwrap_or("".to_string()),
         data: match address {
@@ -68,8 +76,10 @@ async fn function_handler(client: &Client, event: Request) -> Result<Response<Bo
         },
     };
 
+    // データ構造を返却用のJSON文字列に変換
     let body = serde_json::to_string(&data).map_err(Box::new)?;
 
+    // レスポンス作成
     let res = Response::builder()
         .status(200)
         .header("content-type", "application/json")
