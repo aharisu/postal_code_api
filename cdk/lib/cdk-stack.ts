@@ -97,6 +97,17 @@ export class CdkStack extends cdk.Stack {
         })
       });
 
+
+    // 郵便番号更新Lambdaを定期実行する EventBridgeルール
+    const rule = new cdk.aws_events.Rule(this, 'UpdatePostalCodeRule', {
+      //JSTで毎週月曜日の午前2時に実行
+      //see https://docs.aws.amazon.com/ja_jp/AmazonCloudWatch/latest/events/ScheduledEvents.html#CronExpressions
+      schedule: cdk.aws_events.Schedule.cron({ minute: '0', hour: '17', month: '*', year: '*', weekDay: 'SUN' }),
+      targets: [new cdk.aws_events_targets.LambdaFunction(updatePostalCodeLambda, {
+        retryAttempts: 3,
+      })],
+    });
+
     // CFn Outputs
     //new cdk.CfnOutput(this, 'ApiEndpoint', {
     //  value: api.urlForPath('/postal-code')
