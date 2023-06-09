@@ -87,7 +87,15 @@ export class CdkStack extends cdk.Stack {
     //POST: /postal-code
     api.root
       .addResource('postal-code')
-      .addMethod('GET', new cdk.aws_apigateway.LambdaIntegration(getPostalCodeLambda));
+      .addResource('{postalCode}')
+      .addMethod('GET', new cdk.aws_apigateway.LambdaIntegration(getPostalCodeLambda), {
+        requestParameters: {
+          'method.request.path.postalCode': true,
+        },
+        requestValidator: api.addRequestValidator('postal-code-validator', {
+          validateRequestParameters: true,
+        })
+      });
 
     // CFn Outputs
     //new cdk.CfnOutput(this, 'ApiEndpoint', {

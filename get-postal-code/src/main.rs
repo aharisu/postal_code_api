@@ -23,12 +23,12 @@ struct ResponseData {
 async fn function_handler(client: &Client, event: Request) -> Result<Response<Body>, Error> {
     let table_name = env::var("POSTAL_CODE_TABLE").expect("POSTAL_CODE_TABLE not set");
 
-    let query_map = event.query_string_parameters();
-    tracing::info!(query_map = ?query_map, "query");
+    let path_parameters = event.path_parameters();
+    tracing::info!(path_parameters = ?path_parameters, "query");
 
     let mut code: Option<String> = None;
     let mut address: Option<Address> = None;
-    if let Some(postal_code) = query_map.first("postal_code") {
+    if let Some(postal_code) = path_parameters.first("postalCode") {
         let postal_code = postal_code_normalize(postal_code);
         tracing::info!(postal_code = ?postal_code, "Postal code");
 
