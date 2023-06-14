@@ -6,14 +6,24 @@ use std::env;
 
 use aws_sdk_dynamodb::types::{PutRequest, WriteRequest};
 use aws_sdk_dynamodb::{types::AttributeValue, Client};
-use lambda_http::{run, service_fn, Body, Error, Request, Response};
+use lambda_runtime::{run, service_fn, Error, LambdaEvent};
 
 use crate::postal_code_record::PostalCodeRecord;
 
 // コンテンツ全体に対するハッシュ値を保存するキー (national_local_government_codeと絶対に被らない適当な文字列であればよい)
 const HASH_ITEM_KEY: &str = "#hash#";
 
-async fn function_handler(client: &Client, _event: Request) -> Result<Response<Body>, Error> {
+#[derive(serde::Deserialize, serde::Serialize, std::fmt::Debug)]
+struct ResponseData {
+    code: usize,
+    count: usize,
+    message: String,
+}
+
+async fn function_handler(
+    client: &Client,
+    _event: LambdaEvent<serde_json::Value>,
+) -> Result<serde_json::Value, Error> {
     tracing::info!("Start handler");
 
     // 環境変数から必要なDynamoDBのテーブル名を取得
@@ -168,13 +178,13 @@ async fn function_handler(client: &Client, _event: Request) -> Result<Response<B
         }
     }
 
-    let res = Response::builder()
-        .status(200)
-        .header("content-type", "text/plain")
-        .body(count.to_string().into())
-        .map_err(Box::new)?;
+    let response_data = ResponseData {
+        code: 0,
+        count: count,
+        message: "".to_string(),
+    };
 
-    Ok(res)
+    Ok(serde_json::json!(response_data))
 }
 
 // batch_write_itemのリクエストを送信する
@@ -243,8 +253,6 @@ async fn main() -> Result<(), Error> {
     let client = Client::new(&aws_config::load_from_env().await);
     tracing::info!(client = ?client, "Created DynamoDB");
 
-    run(service_fn(|event| async {
-        function_handler(&client, event).await
-    }))
-    .await
+    let func = service_fn(|event| function_handler(&client, event));
+    run(func).await
 }
